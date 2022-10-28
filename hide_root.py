@@ -6,8 +6,6 @@ from time import sleep
 import argparse
 import json
 from bcc import BPF
-#from bcc.syscall import syscall_name, syscalls
-
 
 parser = argparse.ArgumentParser(description="Hide `su` binary.")
 
