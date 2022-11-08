@@ -3,24 +3,25 @@
 #include <linux/sched.h>
 #include <linux/bpf.h>
 
+struct syscall_data_t {
+    u32 pid;
+    u32 syscallId;
+    u64 args[6];
+    u32 paramsIdx;
+    char strBuf[256];
+    unsigned char type;
+};
+
+BPF_PERF_OUTPUT(syscall_events);
 
 struct sysdesc_t {
     u32 nArgs;
     u32 stringMask;
     char syscallName[50];
 };
-//BPF_PERF_OUTPUT(events);
 BPF_HASH(sysdesc, u32, struct sysdesc_t);
 
 RAW_TRACEPOINT_PROBE(sys_enter){
-    // // TP_PROTO(struct task_struct *p)
-    // struct task_struct *p = (struct task_struct *)ctx->args[0];
-    // u32 tgid, pid;
-    // bpf_probe_read_kernel(&tgid, sizeof(tgid), &p->tgid);
-    // bpf_probe_read_kernel(&pid, sizeof(pid), &p->pid);
-    // return trace_enqueue(tgid, pid);
-    //uint64_t id2 = 0;   
-    //bpf_probe_read_kernel(&id2, sizeof(id2), &regs->regs[7]);
     char proc_name[50] = {0};
     struct pt_regs *regs = 0;
 
@@ -29,24 +30,35 @@ RAW_TRACEPOINT_PROBE(sys_enter){
         //ctx->args[0]指向的内容才是真正的寄存器
         regs = (struct pt_regs*)(ctx->args[0]);
         unsigned long syscall_id = ctx->args[1];
-        //if (syscall_id == 334) {
-        if (syscall_id == 48) {
-            bpf_trace_printk("call faccessat\n");
-            u32 key = syscall_id;
-            struct sysdesc_t *val = sysdesc.lookup(&key);
-            bpf_trace_printk("map val %p\n", val);
-            if (val) {
-                bpf_trace_printk("%d %d %s\n", val->nArgs, val->stringMask, val->syscallName);
+
+        struct syscall_data_t data = {0};
+        u64 pid_tgid = bpf_get_current_pid_tgid();
+        data.pid = pid_tgid;
+        data.syscallId = syscall_id;
+        u32 key = syscall_id;
+        struct sysdesc_t *desc = sysdesc.lookup(&key);
+        if (desc) {
+            u32 mask = desc->stringMask;
+            u32 offset = 0;
+            #pragma unroll
+            for (int i = 0; i < 6; i++) {
+                bpf_probe_read_kernel(&data.args[i], sizeof(u64), &regs->regs[i]);
+                u32 pmask = 1 << i;
+                //由于字符串参数不知道多长，ebpf栈只有512字节，所以只能分组发送
+                if (mask & pmask) {
+                    data.strBuf[0] = 0;
+                    data.paramsIdx = i;
+                    data.type = 2;
+                    bpf_probe_read_str(data.strBuf, sizeof(data.strBuf), (void*)data.args[i]);
+                    syscall_events.perf_submit(ctx, &data, sizeof(data));
+                }
             }
-
-            const char *filename = 0;
-            //ctx->args[0]指向的内容是内核地址，不能直接用，要用需要read kernel
-            bpf_probe_read_kernel(&filename, sizeof(filename), &PT_REGS_PARM2(regs));
-
-            bpf_probe_read_str(proc_name, sizeof(proc_name), (void *)filename);
-            bpf_trace_printk("filename %s %p\n", proc_name, filename);
+            data.type = 1;
+            syscall_events.perf_submit(ctx, &data, sizeof(data));
         }
-        bpf_trace_printk("sys_enter syscall id %d\n", syscall_id);
+        else {
+            bpf_trace_printk("sys_enter syscall id %d\n", syscall_id);
+        }
     }
 
     return 0;
