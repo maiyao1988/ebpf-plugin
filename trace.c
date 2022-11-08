@@ -5,9 +5,9 @@
 
 struct syscall_data_t {
     u32 pid;
+    u32 tgid;
     u32 syscallId;
     u64 args[6];
-    u32 paramsIdx;
     char strBuf[256];
     unsigned char type;
 };
@@ -15,9 +15,7 @@ struct syscall_data_t {
 BPF_PERF_OUTPUT(syscall_events);
 
 struct sysdesc_t {
-    u32 nArgs;
     u32 stringMask;
-    char syscallName[50];
 };
 BPF_HASH(sysdesc, u32, struct sysdesc_t);
 
@@ -35,6 +33,7 @@ RAW_TRACEPOINT_PROBE(sys_enter){
         u64 pid_tgid = bpf_get_current_pid_tgid();
         data.pid = pid_tgid;
         data.syscallId = syscall_id;
+        data.tgid = pid_tgid >> 32;
         u32 key = syscall_id;
         struct sysdesc_t *desc = sysdesc.lookup(&key);
         if (desc) {
@@ -47,7 +46,6 @@ RAW_TRACEPOINT_PROBE(sys_enter){
                 //由于字符串参数不知道多长，ebpf栈只有512字节，所以只能分组发送
                 if (mask & pmask) {
                     data.strBuf[0] = 0;
-                    data.paramsIdx = i;
                     data.type = 2;
                     bpf_probe_read_str(data.strBuf, sizeof(data.strBuf), (void*)data.args[i]);
                     syscall_events.perf_submit(ctx, &data, sizeof(data));
