@@ -35,13 +35,12 @@ RAW_TRACEPOINT_PROBE(sys_enter){
     data.tgid = pid_tgid >> 32;
     u32 key = syscall_id;
     struct sysdesc_t *desc = sysdesc.lookup(&key);
-    if (desc) {
-        u32 mask = desc->stringMask;
-        u32 offset = 0;
-        #pragma unroll
-        for (int i = 0; i < 6; i++) {
-            bpf_probe_read_kernel(&data.args[i], sizeof(u64), &regs->regs[i]);
+    #pragma unroll
+    for (int i = 0; i < 6; i++) {
+        bpf_probe_read_kernel(&data.args[i], sizeof(u64), &regs->regs[i]);
+        if (desc) {
             u32 pmask = 1 << i;
+            u32 mask = desc->stringMask;
             //由于字符串参数不知道多长，ebpf栈只有512字节，所以只能分组发送
             if (mask & pmask) {
                 data.strBuf[0] = 0;
@@ -50,12 +49,9 @@ RAW_TRACEPOINT_PROBE(sys_enter){
                 syscall_events.perf_submit(ctx, &data, sizeof(data));
             }
         }
-        data.type = 1;
-        syscall_events.perf_submit(ctx, &data, sizeof(data));
     }
-    else {
-        bpf_trace_printk("sys_enter syscall id %d\n", syscall_id);
-    }
+    data.type = 1;
+    syscall_events.perf_submit(ctx, &data, sizeof(data));
 
     return 0;
 }
