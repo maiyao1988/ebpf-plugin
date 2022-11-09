@@ -69,7 +69,7 @@ def print_syscall_event(cpu, data, size):
 
 #raw_tracepoint work since kernel 4.17
 if __name__ == "__main__":
-    c_file = "bpfc/trace.c"
+    c_file = "bpfc/btrace.c"
     with open(c_file, "r") as f:
         c_src = f.read()
         c_src = utils.bpf_utils.insert_name_filter(c_src, "a.out")
