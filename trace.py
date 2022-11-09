@@ -6,8 +6,9 @@ import argparse
 import json
 from bcc import BPF
 from ctypes import *
-import sys_arm32
-import sys_arm64
+import utils.sys_arm32
+import utils.sys_arm64
+import utils.bpf_utils
 
 class SysDesc(Structure):
     _fields_ = [
@@ -20,7 +21,7 @@ def print_syscall_event(cpu, data, size):
     event = b["syscall_events"].event(data)
 
     if (event.type == 1):
-        systbl = sys_arm64.g_systbl
+        systbl = utils.sys_arm64.g_systbl
         if (event.syscallId in systbl):
             sysUserDesc = systbl[event.syscallId]
             sysMask = 0
@@ -68,30 +69,35 @@ def print_syscall_event(cpu, data, size):
 
 #raw_tracepoint work since kernel 4.17
 if __name__ == "__main__":
-    b = BPF(src_file="trace.c")
-    print("after compile")
-    tbl = b["sysdesc"]
+    c_file = "bpfc/trace.c"
+    with open(c_file, "r") as f:
+        c_src = f.read()
+        c_src = utils.bpf_utils.insert_name_filter(c_src, "a.out")
+        b = BPF(text=c_src)
+        print("after compile")
+        tbl = b["sysdesc"]
 
-    systbl = sys_arm64.g_systbl
+        systbl = utils.sys_arm64.g_systbl
 
-    for sysId in systbl:
-        sysUserDesc = systbl[sysId]
-        sysMask = 0
-        n = len(sysUserDesc)
-        if (n > 2):
-            sysMask = sysUserDesc[2]
-        sysval = SysDesc(c_int32(sysMask))
-        tbl[c_int(sysId)] = sysval
-    #
-    print("ready...")
-    b["syscall_events"].open_perf_buffer(print_syscall_event)
-
-    while True:
-        try:
-            b.perf_buffer_poll()
-        except KeyboardInterrupt:
-            exit()
+        for sysId in systbl:
+            sysUserDesc = systbl[sysId]
+            sysMask = 0
+            n = len(sysUserDesc)
+            if (n > 2):
+                sysMask = sysUserDesc[2]
+            sysval = SysDesc(c_int32(sysMask))
+            tbl[c_int(sysId)] = sysval
         #
+        print("ready...")
+        b["syscall_events"].open_perf_buffer(print_syscall_event)
+
+        while True:
+            try:
+                b.perf_buffer_poll()
+            except KeyboardInterrupt:
+                exit()
+            #
+        #
+        #b.trace_print()
     #
-    #b.trace_print()
 #
