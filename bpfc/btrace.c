@@ -65,7 +65,6 @@ RAW_TRACEPOINT_PROBE(sys_enter){
         else {
             bpf_probe_read_kernel(&data.lr, sizeof(data.lr), &regs->regs[30]);
         }
-        syscall_events.perf_submit(ctx, &data, sizeof(data));
     }
     bpf_probe_read_kernel(&data.pc, sizeof(data.pc), &PT_REGS_IP(regs));
     data.type = 1;
