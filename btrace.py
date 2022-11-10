@@ -40,7 +40,7 @@ def print_syscall_event(cpu, data, size):
             #
             syscallName = sysUserDesc[1]
             nArgs = sysUserDesc[0]
-            outStr = "%d-%d %s(%d)"%(event.tgid, event.pid, syscallName, event.syscallId)
+            outStr = "%d-%d %s(%d) (0x%08x)"%(event.tgid, event.pid, syscallName, event.syscallId, event.pc)
             listId = 0
             for i in range(0, nArgs):
                 mask = 1 << i

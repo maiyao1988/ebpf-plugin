@@ -9,6 +9,7 @@ struct syscall_data_t {
     unsigned char type;
     char strBuf[256];
     u64 syscallId;
+    u64 pc;
     u64 ret;
     u64 args[6];
 };
@@ -54,6 +55,7 @@ RAW_TRACEPOINT_PROBE(sys_enter){
             }
         }
     }
+    bpf_probe_read_kernel(&data.pc, sizeof(data.pc), &PT_REGS_IP(regs));
     data.type = 1;
     syscall_events.perf_submit(ctx, &data, sizeof(data));
 
