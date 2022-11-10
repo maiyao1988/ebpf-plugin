@@ -40,7 +40,7 @@ def print_syscall_event(cpu, data, size):
             #
             syscallName = sysUserDesc[1]
             nArgs = sysUserDesc[0]
-            outStr = "%d-%d %s(%d) (0x%08x)"%(event.tgid, event.pid, syscallName, event.syscallId, event.pc)
+            outStr = "%d-%d %s(%d) (0x%08x) (0x%08x)"%(event.tgid, event.pid, syscallName, event.syscallId, event.pc, event.lr)
             listId = 0
             for i in range(0, nArgs):
                 mask = 1 << i
@@ -61,7 +61,7 @@ def print_syscall_event(cpu, data, size):
             #
         #
         else:
-            print("%d-%d *unknown*(%d) [0x%08x] [0x%08x] [0x%08x] [0x%08x] [0x%08x] [0x%08x]"%(event.tgid, event.pid, event.syscallId, event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5]))
+            print("%d-%d *unknown*(%d) (0x%08x) (0x%08x) [0x%08x] [0x%08x] [0x%08x] [0x%08x] [0x%08x] [0x%08x]"%(event.tgid, event.pid, event.syscallId, event.pc, event.lr, event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5]))
         #
     elif (event.type == 2):
         #收集字符串参数

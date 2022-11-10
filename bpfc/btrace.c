@@ -10,6 +10,7 @@ struct syscall_data_t {
     char strBuf[256];
     u64 syscallId;
     u64 pc;
+    u64 lr;
     u64 ret;
     u64 args[6];
 };
@@ -54,6 +55,17 @@ RAW_TRACEPOINT_PROBE(sys_enter){
                 syscall_events.perf_submit(ctx, &data, sizeof(data));
             }
         }
+    }
+    key = 0;
+    struct input_data_t *inputParams = input.lookup(&key);
+    if (inputParams) {
+        if(inputParams->is32) {
+            bpf_probe_read_kernel(&data.lr, sizeof(data.lr), &regs->regs[14]);
+        }
+        else {
+            bpf_probe_read_kernel(&data.lr, sizeof(data.lr), &regs->regs[30]);
+        }
+        syscall_events.perf_submit(ctx, &data, sizeof(data));
     }
     bpf_probe_read_kernel(&data.pc, sizeof(data.pc), &PT_REGS_IP(regs));
     data.type = 1;
