@@ -115,7 +115,8 @@ if __name__ == "__main__":
             tbl[c_int(sysId)] = sysval
         #
         print("monitoring...")
-        b["syscall_events"].open_perf_buffer(print_syscall_event)
+        #page_cnt必须设置大一点，否则会丢包
+        b["syscall_events"].open_perf_buffer(print_syscall_event, page_cnt=2048)
 
         while True:
             try:
