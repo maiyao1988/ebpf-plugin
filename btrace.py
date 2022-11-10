@@ -14,8 +14,14 @@ import utils.bpf_utils
 class SysDesc(Structure):
     _fields_ = [
             ("stringMask", c_int32)
-            ]
+    ]
 #
+class InputDesc(Structure):
+    _fields_ = [
+            ("is32", c_byte)
+    ]
+#
+
 g_sys_platform = utils.sys_arm64
 
 g_sysStrParamMap = {}
@@ -69,12 +75,23 @@ def print_syscall_event(cpu, data, size):
         val.append(event.strBuf)
         #print("2 pid %d %r"%(event.pid, event.strBuf))
     #
+    elif(event.type == 3):        
+        systbl = g_sys_platform.g_systbl
+        if (event.syscallId in systbl):
+            sysUserDesc = systbl[event.syscallId]
+            syscallName = sysUserDesc[1]
+            outStr = "%d-%d %s(%d) return [0x%08x]"%(event.tgid, event.pid, syscallName, event.syscallId, event.ret)
+            print(outStr)
+        #
+        else:
+           print("%d-%d *unknown*(%d) return [0x%08x]"%(event.tgid, event.pid, event.syscallId, event.ret)) 
+    #
 #
 
 
 #raw_tracepoint work since kernel 4.17
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Hide `su` binary.")
+    parser = argparse.ArgumentParser(description="trace syscall.")
 
     program_filter = parser.add_mutually_exclusive_group(required=True)
     program_filter.add_argument("-p", "--pid", help="use pid filter", type=int)
@@ -86,12 +103,7 @@ if __name__ == "__main__":
     program_platform.add_argument("-m64", help="the target process is 64bit", action="store_true")
 
     args = parser.parse_args()
-    if(args.m32):
-        g_sys_platform = utils.sys_arm32
-    #
-    else:
-        g_sys_platform = utils.sys_arm64
-    #
+
     c_file = "bpfc/btrace.c"
     with open(c_file, "r") as f:
         c_src = f.read()
@@ -101,10 +113,19 @@ if __name__ == "__main__":
             c_src = utils.bpf_utils.insert_name_filter(c_src, args.name)
         #
         b = BPF(text=c_src)
-        tbl = b["sysdesc"]
-
+        input_map = b["input"]
+        if(args.m32):
+            inputVal = InputDesc(c_byte(1))
+            input_map[c_int(0)] = inputVal
+            g_sys_platform = utils.sys_arm32
+        #
+        else:
+            inputVal = InputDesc(c_byte(0))
+            input_map[c_int(0)] = inputVal
+            g_sys_platform = utils.sys_arm64
+        #
         systbl = g_sys_platform.g_systbl
-
+        tbl = b["sysdesc"]
         for sysId in systbl:
             sysUserDesc = systbl[sysId]
             sysMask = 0
