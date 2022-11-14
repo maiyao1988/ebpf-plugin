@@ -97,7 +97,6 @@ if __name__ == "__main__":
     program_filter.add_argument("-p", "--pid", help="use process id filter", type=int)
     program_filter.add_argument("-t", "--tid", help="use thread id filter", type=int)
     program_filter.add_argument("-u", "--uid", help="use user id filter", type=int)
-
     program_filter.add_argument("-n", "--name", help="use process name filter", type=str)
 
     program_platform = parser.add_mutually_exclusive_group(required=True)
