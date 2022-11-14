@@ -25,6 +25,19 @@ def insert_tid_filter(bpf_text, tid):
     return bpf_text
 #
 
+def insert_uid_filter(bpf_text, uid):
+    bpf_text = "#define FILTER_UID {}\n".format(uid) + bpf_text
+    uid_filter = """
+    u32 uid_ = bpf_get_current_uid_gid();
+    if (uid_ != FILTER_UID) {
+        return 0;
+    }
+    """
+    bpf_text = bpf_text.replace("PROCESS_FILTER", uid_filter)
+
+    return bpf_text
+#
+
 def insert_name_filter(bpf_text, program_name):
     compare_statement = []
     # Android seem to truncate the process name to the
