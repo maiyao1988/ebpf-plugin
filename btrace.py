@@ -96,6 +96,7 @@ if __name__ == "__main__":
     program_filter = parser.add_mutually_exclusive_group(required=True)
     program_filter.add_argument("-p", "--pid", help="use process id filter", type=int)
     program_filter.add_argument("-t", "--tid", help="use thread id filter", type=int)
+    program_filter.add_argument("-u", "--uid", help="use user id filter", type=int)
     program_filter.add_argument("-n", "--name", help="use process name filter", type=str)
 
     program_platform = parser.add_mutually_exclusive_group(required=True)
@@ -112,6 +113,8 @@ if __name__ == "__main__":
             c_src = utils.bpf_utils.insert_pid_filter(c_src, args.pid)
         elif args.tid:
             c_src = utils.bpf_utils.insert_tid_filter(c_src, args.tid)
+        elif args.uid:
+            c_src = utils.bpf_utils.insert_uid_filter(c_src, args.uid)
         else:
             c_src = utils.bpf_utils.insert_name_filter(c_src, args.name)
         #
