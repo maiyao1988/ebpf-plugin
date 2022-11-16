@@ -18,7 +18,8 @@ class SysDesc(Structure):
 #
 class InputDesc(Structure):
     _fields_ = [
-            ("is32", c_byte)
+            ("is32", c_byte),
+            ("useFilter", c_byte)
     ]
 #
 
@@ -120,16 +121,18 @@ if __name__ == "__main__":
         #
         b = BPF(text=c_src)
         input_map = b["input"]
+        isM32 = 0
+        useFilter = 0
         if(args.m32):
-            inputVal = InputDesc(c_byte(1))
-            input_map[c_int(0)] = inputVal
+            isM32 = 1
             g_sys_platform = utils.sys_arm32
         #
         else:
-            inputVal = InputDesc(c_byte(0))
-            input_map[c_int(0)] = inputVal
+            isM32 = 0
             g_sys_platform = utils.sys_arm64
         #
+        inputVal = InputDesc(c_byte(isM32), c_byte(useFilter))
+        input_map[c_int(0)] = inputVal
         systbl = g_sys_platform.g_systbl
         tbl = b["sysdesc"]
         for sysId in systbl:
@@ -141,6 +144,9 @@ if __name__ == "__main__":
             sysval = SysDesc(c_int32(sysMask))
             tbl[c_int(sysId)] = sysval
         #
+        # tblfilter = b["sysfilter"]
+        # tblfilter[c_int(322)] = c_byte(1)
+
         print("monitoring...")
         #page_cnt必须设置大一点，否则会丢包
         b["syscall_events"].open_perf_buffer(print_syscall_event, page_cnt=2048)
