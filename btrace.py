@@ -89,6 +89,35 @@ def print_syscall_event(cpu, data, size):
     #
 #
 
+def filter_name_to_id(name, syscall_tbl):
+    for sysId in syscall_tbl:
+        sysUserDesc = syscall_tbl[sysId]
+        syscallName = sysUserDesc[1]
+        if (name == syscallName):
+            return sysId
+        #
+    #
+    return -1
+#
+
+def read_filter_file(filter_path, syscall_tbl):
+    r = []
+    with open(filter_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if (line == ""):
+                continue
+            #
+            syscallId = filter_name_to_id(line, syscall_tbl)
+            if (syscallId > -1):
+                r.append(syscallId)
+            #
+        #
+    #
+    return r
+#
+
+
 
 #raw_tracepoint work since kernel 4.17
 if __name__ == "__main__":
@@ -105,8 +134,8 @@ if __name__ == "__main__":
     program_platform.add_argument("-m32", help="the target process is 32bit", action="store_true")
     program_platform.add_argument("-m64", help="the target process is 64bit", action="store_true")
 
+    parser.add_argument("-fp", "--filter-path", help="syscall filter file", type=str, required = False)
     args = parser.parse_args()
-
     c_file = "bpfc/btrace.c"
     with open(c_file, "r") as f:
         c_src = f.read()
@@ -122,7 +151,6 @@ if __name__ == "__main__":
         b = BPF(text=c_src)
         input_map = b["input"]
         isM32 = 0
-        useFilter = 0
         if(args.m32):
             isM32 = 1
             g_sys_platform = utils.sys_arm32
@@ -130,6 +158,18 @@ if __name__ == "__main__":
         else:
             isM32 = 0
             g_sys_platform = utils.sys_arm64
+        #
+        useFilter = 0
+        filters = []
+        if (args.filter_path):
+            filters = read_filter_file(args.filter_path, g_sys_platform.g_systbl)
+            if (len(filters) > 0):
+                useFilter = 1
+                tblfilter = b["sysfilter"]
+                for filter_sysId in filters:
+                    tblfilter[c_int(filter_sysId)] = c_byte(1)
+                #
+            #
         #
         inputVal = InputDesc(c_byte(isM32), c_byte(useFilter))
         input_map[c_int(0)] = inputVal
@@ -144,8 +184,6 @@ if __name__ == "__main__":
             sysval = SysDesc(c_int32(sysMask))
             tbl[c_int(sysId)] = sysval
         #
-        # tblfilter = b["sysfilter"]
-        # tblfilter[c_int(322)] = c_byte(1)
 
         print("monitoring...")
         #page_cnt必须设置大一点，否则会丢包

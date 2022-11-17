@@ -1,0 +1,12 @@
+open
+openat
+faccessat
+unlink
+unlinkat
+readlinkat
+fork
+vfork
+execveat
+execve
+statfs
+stat
