@@ -117,6 +117,17 @@ def read_filter_file(filter_path, syscall_tbl):
     return r
 #
 
+def get_filter_list_from_str(filter_str, syscall_tbl):
+    r = []
+    l = filter_str.split(",")
+    for filter_name in l:
+        syscallId = filter_name_to_id(filter_name, syscall_tbl)
+        if (syscallId > -1):
+            r.append(syscallId)
+        #
+    #
+    return r
+#
 
 
 #raw_tracepoint work since kernel 4.17
@@ -134,7 +145,10 @@ if __name__ == "__main__":
     program_platform.add_argument("-m32", help="the target process is 32bit", action="store_true")
     program_platform.add_argument("-m64", help="the target process is 64bit", action="store_true")
 
-    parser.add_argument("-fp", "--filter-path", help="syscall filter file", type=str, required = False)
+    syscall_filter = parser.add_mutually_exclusive_group(required=False)
+    syscall_filter.add_argument("-fp", "--filter-path", help="syscall filter file", type=str)
+    syscall_filter.add_argument("-f", "--filter", help="syscall filter, example:openat,faccessat,...", type=str)
+
     args = parser.parse_args()
     c_file = "bpfc/btrace.c"
     with open(c_file, "r") as f:
@@ -163,12 +177,15 @@ if __name__ == "__main__":
         filters = []
         if (args.filter_path):
             filters = read_filter_file(args.filter_path, g_sys_platform.g_systbl)
-            if (len(filters) > 0):
-                useFilter = 1
-                tblfilter = b["sysfilter"]
-                for filter_sysId in filters:
-                    tblfilter[c_int(filter_sysId)] = c_byte(1)
-                #
+        #
+        elif(args.filter):
+            filters = get_filter_list_from_str(args.filter, g_sys_platform.g_systbl)
+        #
+        if (len(filters) > 0):
+            useFilter = 1
+            tblfilter = b["sysfilter"]
+            for filter_sysId in filters:
+                tblfilter[c_int(filter_sysId)] = c_byte(1)
             #
         #
         inputVal = InputDesc(c_byte(isM32), c_byte(useFilter))
