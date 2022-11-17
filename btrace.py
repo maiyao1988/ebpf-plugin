@@ -18,7 +18,8 @@ class SysDesc(Structure):
 #
 class InputDesc(Structure):
     _fields_ = [
-            ("is32", c_byte)
+            ("is32", c_byte),
+            ("useFilter", c_byte)
     ]
 #
 
@@ -88,6 +89,46 @@ def print_syscall_event(cpu, data, size):
     #
 #
 
+def filter_name_to_id(name, syscall_tbl):
+    for sysId in syscall_tbl:
+        sysUserDesc = syscall_tbl[sysId]
+        syscallName = sysUserDesc[1]
+        if (name == syscallName):
+            return sysId
+        #
+    #
+    return -1
+#
+
+def read_filter_file(filter_path, syscall_tbl):
+    r = []
+    with open(filter_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if (line == ""):
+                continue
+            #
+            syscallId = filter_name_to_id(line, syscall_tbl)
+            if (syscallId > -1):
+                r.append(syscallId)
+            #
+        #
+    #
+    return r
+#
+
+def get_filter_list_from_str(filter_str, syscall_tbl):
+    r = []
+    l = filter_str.split(",")
+    for filter_name in l:
+        syscallId = filter_name_to_id(filter_name, syscall_tbl)
+        if (syscallId > -1):
+            r.append(syscallId)
+        #
+    #
+    return r
+#
+
 
 #raw_tracepoint work since kernel 4.17
 if __name__ == "__main__":
@@ -104,8 +145,11 @@ if __name__ == "__main__":
     program_platform.add_argument("-m32", help="the target process is 32bit", action="store_true")
     program_platform.add_argument("-m64", help="the target process is 64bit", action="store_true")
 
-    args = parser.parse_args()
+    syscall_filter = parser.add_mutually_exclusive_group(required=False)
+    syscall_filter.add_argument("-fp", "--filter-path", help="syscall filter file", type=str)
+    syscall_filter.add_argument("-f", "--filter", help="syscall filter, example:openat,faccessat,...", type=str)
 
+    args = parser.parse_args()
     c_file = "bpfc/btrace.c"
     with open(c_file, "r") as f:
         c_src = f.read()
@@ -120,16 +164,32 @@ if __name__ == "__main__":
         #
         b = BPF(text=c_src)
         input_map = b["input"]
+        isM32 = 0
         if(args.m32):
-            inputVal = InputDesc(c_byte(1))
-            input_map[c_int(0)] = inputVal
+            isM32 = 1
             g_sys_platform = utils.sys_arm32
         #
         else:
-            inputVal = InputDesc(c_byte(0))
-            input_map[c_int(0)] = inputVal
+            isM32 = 0
             g_sys_platform = utils.sys_arm64
         #
+        useFilter = 0
+        filters = []
+        if (args.filter_path):
+            filters = read_filter_file(args.filter_path, g_sys_platform.g_systbl)
+        #
+        elif(args.filter):
+            filters = get_filter_list_from_str(args.filter, g_sys_platform.g_systbl)
+        #
+        if (len(filters) > 0):
+            useFilter = 1
+            tblfilter = b["sysfilter"]
+            for filter_sysId in filters:
+                tblfilter[c_int(filter_sysId)] = c_byte(1)
+            #
+        #
+        inputVal = InputDesc(c_byte(isM32), c_byte(useFilter))
+        input_map[c_int(0)] = inputVal
         systbl = g_sys_platform.g_systbl
         tbl = b["sysdesc"]
         for sysId in systbl:
@@ -141,6 +201,7 @@ if __name__ == "__main__":
             sysval = SysDesc(c_int32(sysMask))
             tbl[c_int(sysId)] = sysval
         #
+
         print("monitoring...")
         #page_cnt必须设置大一点，否则会丢包
         b["syscall_events"].open_perf_buffer(print_syscall_event, page_cnt=2048)

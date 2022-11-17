@@ -18,6 +18,7 @@ BPF_PERF_OUTPUT(syscall_events);
 
 struct input_data_t {
     bool is32;
+    bool useFilter;
 };
 BPF_HASH(input, u32, struct input_data_t);
 
@@ -25,6 +26,8 @@ struct sysdesc_t {
     u32 stringMask;
 };
 BPF_HASH(sysdesc, u32, struct sysdesc_t);
+
+BPF_HASH(sysfilter, u32, u8);
 
 RAW_TRACEPOINT_PROBE(sys_enter){
     
@@ -35,41 +38,53 @@ RAW_TRACEPOINT_PROBE(sys_enter){
     unsigned long syscall_id = ctx->args[1];
 
     struct syscall_data_t data = {0};
-    u64 pid_tgid = bpf_get_current_pid_tgid();
-    data.pid = pid_tgid;
-    data.syscallId = syscall_id;
-    data.tgid = pid_tgid >> 32;
-    u32 key = syscall_id;
-    struct sysdesc_t *desc = sysdesc.lookup(&key);
-    #pragma unroll
-    for (int i = 0; i < 6; i++) {
-        bpf_probe_read_kernel(&data.args[i], sizeof(u64), &regs->regs[i]);
-        if (desc) {
-            u32 pmask = 1 << i;
-            u32 mask = desc->stringMask;
-            //由于字符串参数不知道多长，ebpf栈只有512字节，所以只能分组发送
-            if (mask & pmask) {
-                data.strBuf[0] = 0;
-                data.type = 2;
-                bpf_probe_read_str(data.strBuf, sizeof(data.strBuf), (void*)data.args[i]);
-                syscall_events.perf_submit(ctx, &data, sizeof(data));
+
+    u32 key0 = 0;
+    struct input_data_t *inputParams = input.lookup(&key0);
+    if (inputParams) {
+        if (inputParams->useFilter) {
+            u32 key1 = syscall_id;
+            u8 *dummy = (u8*)sysfilter.lookup(&key1);
+            if (!dummy) {
+                //skip if not get filter
+                return 0;
             }
         }
-    }
-    key = 0;
-    struct input_data_t *inputParams = input.lookup(&key);
-    if (inputParams) {
         if(inputParams->is32) {
             bpf_probe_read_kernel(&data.lr, sizeof(data.lr), &regs->regs[14]);
         }
         else {
             bpf_probe_read_kernel(&data.lr, sizeof(data.lr), &regs->regs[30]);
         }
-    }
-    bpf_probe_read_kernel(&data.pc, sizeof(data.pc), &PT_REGS_IP(regs));
-    data.type = 1;
-    syscall_events.perf_submit(ctx, &data, sizeof(data));
 
+        u64 pid_tgid = bpf_get_current_pid_tgid();
+        data.pid = pid_tgid;
+        data.syscallId = syscall_id;
+        data.tgid = pid_tgid >> 32;
+        u32 key = syscall_id;
+        struct sysdesc_t *desc = sysdesc.lookup(&key);
+        #pragma unroll
+        for (int i = 0; i < 6; i++) {
+            bpf_probe_read_kernel(&data.args[i], sizeof(u64), &regs->regs[i]);
+            if (desc) {
+                u32 pmask = 1 << i;
+                u32 mask = desc->stringMask;
+                //由于字符串参数不知道多长，ebpf栈只有512字节，所以只能分组发送
+                if (mask & pmask) {
+                    data.strBuf[0] = 0;
+                    data.type = 2;
+                    bpf_probe_read_str(data.strBuf, sizeof(data.strBuf), (void*)data.args[i]);
+                    syscall_events.perf_submit(ctx, &data, sizeof(data));
+                }
+            }
+        }
+        bpf_probe_read_kernel(&data.pc, sizeof(data.pc), &PT_REGS_IP(regs));
+        data.type = 1;
+        syscall_events.perf_submit(ctx, &data, sizeof(data));
+    }
+    else {
+        bpf_trace_printk("btrace: input is not set!!!");
+    }
     return 0;
 }
 
@@ -78,22 +93,30 @@ RAW_TRACEPOINT_PROBE(sys_exit){
 
     struct pt_regs *regs = (struct pt_regs*)(ctx->args[0]);
     u64 ret = ctx->args[1];
-    struct syscall_data_t data = {0};
-    data.type = 3;
-    data.ret = ret;
-    u64 pid_tgid = bpf_get_current_pid_tgid();
-    data.pid = pid_tgid;
-    data.tgid = pid_tgid >> 32;
-
     u32 key = 0;
     struct input_data_t *inputParams = input.lookup(&key);
     if (inputParams) {
+        struct syscall_data_t data = {0};
+
         if(inputParams->is32) {
             bpf_probe_read_kernel(&data.syscallId, sizeof(data.syscallId), &regs->regs[7]);
         }
         else {
             bpf_probe_read_kernel(&data.syscallId, sizeof(data.syscallId), &regs->regs[8]);
         }
+        if (inputParams->useFilter) {
+            u32 key1 = data.syscallId;
+            u8 *dummy = (u8*)sysfilter.lookup(&key1);
+            if (!dummy) {
+                //skip if not get filter
+                return 0;
+            }
+        }
+        data.type = 3;
+        data.ret = ret;
+        u64 pid_tgid = bpf_get_current_pid_tgid();
+        data.pid = pid_tgid;
+        data.tgid = pid_tgid >> 32;
         syscall_events.perf_submit(ctx, &data, sizeof(data));
     }
     else {
