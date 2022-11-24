@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from datetime import datetime
+import time
 import argparse
 import json
 from bcc import BPF
@@ -29,7 +30,7 @@ g_sysStrParamMap = {}
 
 def print_syscall_event(cpu, data, size):
     event = b["syscall_events"].event(data)
-
+    tm = datetime.now().strftime('%m-%d %H:%M:%S.%f')[:-3]
     if (event.type == 1):
         systbl = g_sys_platform.g_systbl
         if (event.syscallId in systbl):
@@ -41,12 +42,12 @@ def print_syscall_event(cpu, data, size):
             #
             syscallName = sysUserDesc[1]
             nArgs = sysUserDesc[0]
-            outStr = "%d-%d %s(%d) (0x%08x) (0x%08x)"%(event.tgid, event.pid, syscallName, event.syscallId, event.pc, event.lr)
+            outStr = "%s %d-%d %s(%d) (0x%08x) (0x%08x)"%(tm, event.tgid, event.pid, syscallName, event.syscallId, event.pc, event.lr)
             listId = 0
             for i in range(0, nArgs):
                 mask = 1 << i
                 if (mask & sysMask):
-                    assert (event.pid, event.syscallId) in g_sysStrParamMap
+                    assert (event.pid, event.syscallId) in g_sysStrParamMap, "(%d, %d) not in g_sysStrParamMap"%(event.pid, event.syscallId)
                     paramList = g_sysStrParamMap[(event.pid, event.syscallId)]
                     valStr = paramList[listId]
                     listId += 1
@@ -62,10 +63,11 @@ def print_syscall_event(cpu, data, size):
             #
         #
         else:
-            print("%d-%d *unknown*(%d) (0x%08x) (0x%08x) [0x%08x] [0x%08x] [0x%08x] [0x%08x] [0x%08x] [0x%08x]"%(event.tgid, event.pid, event.syscallId, event.pc, event.lr, event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5]))
+            print("%s %d-%d *unknown*(%d) (0x%08x) (0x%08x) [0x%08x] [0x%08x] [0x%08x] [0x%08x] [0x%08x] [0x%08x]"%(tm, event.tgid, event.pid, event.syscallId, event.pc, event.lr, event.args[0], event.args[1], event.args[2], event.args[3], event.args[4], event.args[5]))
         #
     elif (event.type == 2):
         #收集字符串参数
+        #print("------------%d %d"%(event.pid, event.syscallId))
         val = None
         if (event.pid, event.syscallId) in g_sysStrParamMap:
             val = g_sysStrParamMap[(event.pid, event.syscallId)]
@@ -81,11 +83,11 @@ def print_syscall_event(cpu, data, size):
         if (event.syscallId in systbl):
             sysUserDesc = systbl[event.syscallId]
             syscallName = sysUserDesc[1]
-            outStr = "%d-%d %s(%d) return [0x%08x]"%(event.tgid, event.pid, syscallName, event.syscallId, event.ret)
+            outStr = "%s %d-%d %s(%d) return [0x%08x]"%(tm, event.tgid, event.pid, syscallName, event.syscallId, event.ret)
             print(outStr)
         #
         else:
-           print("%d-%d *unknown*(%d) return [0x%08x]"%(event.tgid, event.pid, event.syscallId, event.ret)) 
+            print("%s %d-%d *unknown*(%d) return [0x%08x]"%(tm, event.tgid, event.pid, event.syscallId, event.ret)) 
     #
 #
 

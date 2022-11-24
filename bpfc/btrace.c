@@ -74,6 +74,7 @@ RAW_TRACEPOINT_PROBE(sys_enter){
                     data.strBuf[0] = 0;
                     data.type = 2;
                     bpf_probe_read_str(data.strBuf, sizeof(data.strBuf), (void*)data.args[i]);
+                    //bpf_trace_printk("btrace: %d %d call", data.pid, data.syscallId);
                     syscall_events.perf_submit(ctx, &data, sizeof(data));
                 }
             }
